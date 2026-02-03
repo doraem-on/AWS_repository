@@ -1,0 +1,6 @@
+streamlit       # The web interface
+langchain       # The framework to manage AI logic
+langchain-google-genai # To use Gemini 
+python-dotenv   # To read the .env file
+gtts            # Google Text-to-Speech - ig its free
+generativeai  # To use Gemini
