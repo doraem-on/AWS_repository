@@ -1,6 +1,6 @@
 # 🇮🇳 India's Media Ai (Bharatflow.ai): The Unified Content Supply Chain
 
-![Status](https://img.shields.io/badge/Status-MVP_Ready-success) ![Tech](https://img.shields.io/badge/AI-Generative-blueviolet) ![Focus](https://img.shields.io/badge/Focus-Media_%26_Localization-orange)
+![Topic](https://img.shields.io/badge/Focus-Media_%26_Localization-orange)
 
 > **One Input. Infinite Native Experiences.**
 >
