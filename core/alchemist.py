@@ -1,58 +1,67 @@
+# core/alchemist.py
+import boto3
+import json
 import os
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.prompts import PromptTemplate
-from gtts import gTTS
+import time
+from dotenv import load_dotenv
 
-# Initialize the Model
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3)
+# Load environment variables (AWS Keys)
+load_dotenv()
 
-def localize_content(text_content, target_language):
-    """
-    1. Culturally adapts and translates text.
-    2. Generates an audio file for the translated text.
-    """
-    
-    # --- Step A: AI Adaptation ---
-    template = """
-    You are a professional localization expert for the Indian market.
-    Your task:
-    1. Translate the following script into {language}.
-    2. ADAPT cultural references. (Example: If the text says 'Grab a coffee', change it to something culturally relevant like 'Chai' if appropriate for the region).
-    3. Keep the tone consistent.
+# Initialize the AWS Step Functions Client
+# This is our remote control for the cloud workflow
+sfn_client = boto3.client(
+    'stepfunctions',
+    region_name=os.getenv("AWS_REGION"),
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY")
+)
 
-    Original Script: "{text}"
+STATE_MACHINE_ARN = os.getenv("ALCHEMIST_STATE_MACHINE_ARN")
+
+def start_transcreation_pipeline(s3_video_key, source_lang, target_lang, context_tone="casual"):
+    """
+    Triggers the AWS Cloud Pipeline to localize the video.
     
-    Return ONLY the final translated text. No explanations.
+    Args:
+        s3_video_key (str): The path to the video in your S3 bucket (e.g., 'raw/video1.mp4')
+        source_lang (str): Original language (e.g., 'en-US')
+        target_lang (str): Desired output (e.g., 'hi-IN')
+        context_tone (str): The 'vibe' for the Alchemist (e.g., 'formal', 'funny')
+    
+    Returns:
+        str: The Execution ARN (Tracking ID)
     """
     
-    prompt = PromptTemplate(template=template, input_variables=["language", "text"])
-    chain = prompt | llm
-    
-    # Get the translated text
-    translated_text = chain.invoke({"language": target_language, "text": text_content}).content
-    
-    # --- Step B: Audio Generation (TTS) ---
-    # Map languages to gTTS codes
-    lang_codes = {
-        "Hindi": "hi",
-        "Tamil": "ta",
-        "Bengali": "bn",
-        "Telugu": "te",
-        "Kannada": "kn"
+    # 1. Prepare the Payload
+    # This is the "Job Ticket" we hand to the Project Manager
+    payload = {
+        "Input": {
+            "s3_key": s3_video_key,
+            "source_language": source_lang,
+            "target_language": target_lang,
+            "transcreation_tone": context_tone
+        }
     }
-    
-    # Default to English 'en' if language not found
-    code = lang_codes.get(target_language, "en")
-    
-    # Generate Audio
-    tts = gTTS(text=translated_text, lang=code, slow=False)
-    
-    # Save the file
-    filename = f"assets/audio_{code}.mp3"
-    
-    # Ensure assets folder exists
-    os.makedirs("assets", exist_ok=True)
-    
-    tts.save(filename)
-    
-    return translated_text, filename
+
+    try:
+        # 2. Fire and Forget
+        response = sfn_client.start_execution(
+            stateMachineArn=STATE_MACHINE_ARN,
+            name=f"AlchemistJob-{int(time.time())}", # Unique ID for this run
+            input=json.dumps(payload)
+        )
+        
+        print(f"✅ Pipeline Triggered! Tracking ID: {response['executionArn']}")
+        return response['executionArn']
+
+    except Exception as e:
+        print(f"❌ Failed to trigger cloud pipeline: {e}")
+        return None
+
+def check_pipeline_status(execution_arn):
+    """
+    Optional: call this every few seconds to see if the job is done.
+    """
+    response = sfn_client.describe_execution(executionArn=execution_arn)
+    return response['status'] # Returns: RUNNING, SUCCEEDED, or FAILED

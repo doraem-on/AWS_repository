@@ -38,3 +38,9 @@ def analyze_compliance(text_content):
     
     response = chain.invoke({"text": text_content})
     return response.content
+
+# core/guardian.py
+def check_brand_safety(s3_video_key):
+    # Trigger AWS Rekognition Content Moderation
+    response = rekognition.start_content_moderation(...)
+    return response['JobId']
